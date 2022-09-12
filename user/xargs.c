@@ -23,7 +23,6 @@ int main(int argc, char *argv[])
 
     // read stdin and add to buff in child process
     char *in = malloc(512 * sizeof(char));
-    char zero = '\0';
     while (gets(in, 512))
     {
         int len = strlen(in);
@@ -33,7 +32,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-            in[len - 1] = zero;
+            in[len - 1] = '\0';
             buff[cnt++] = in;
             buff[cnt++] = 0;
             if (!fork())
