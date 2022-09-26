@@ -112,10 +112,22 @@ sys_trace(void)
 uint64
 sys_sysinfo(void)
 {
-  uint64 st; // user pointer to struct stat
-  if (argaddr(0, &st) < 0)
+  uint64 addr;
+  if (argaddr(0, &addr) < 0)
   {
     return -1;
   }
-  return sysinfo(st);
+
+  struct proc *p = myproc();
+  struct sysinfo info;
+
+  info.freemem = freemem();
+  info.nproc = nproc();
+  info.freefd = freefd();
+
+  if (copyout(p->pagetable, addr, (char *)&info, sizeof(info)) < 0)
+  {
+    return -1;
+  }
+  return 0;
 }

@@ -764,19 +764,3 @@ int freefd(void)
 
   return cnt;
 }
-
-int sysinfo(uint64 addr)
-{
-  struct proc *p = myproc();
-  struct sysinfo info;
-
-  info.freemem = freemem();
-  info.nproc = nproc();
-  info.freefd = freefd();
-
-  if (copyout(p->pagetable, addr, (char *)&info, sizeof(info)) < 0)
-  {
-    return -1;
-  }
-  return 0;
-}
