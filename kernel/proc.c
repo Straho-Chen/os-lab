@@ -746,20 +746,17 @@ int nproc(void)
 
 int freefd(void)
 {
-  struct proc *p;
+  struct proc *p = myproc();
   int cnt = 0;
 
-  for (p = proc; p < &proc[NPROC]; p++)
+  for (int fd = 0; fd < NOFILE; fd++)
   {
-    for (int fd = 0; fd < NOFILE; fd++)
+    acquire(&p->lock);
+    if (p->ofile[fd] == 0)
     {
-      acquire(&p->lock);
-      if (p->ofile[fd] == 0)
-      {
-        cnt++;
-      }
-      release(&p->lock);
+      cnt++;
     }
+    release(&p->lock);
   }
 
   return cnt;
