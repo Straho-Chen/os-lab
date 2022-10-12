@@ -103,8 +103,10 @@ bget(uint dev, uint blockno)
       return b;
     }
   }
+  release(&bcache.bucketlock[key]);
 
   acquire(&bcache.lock);
+  acquire(&bcache.bucketlock[key]);
   for (int i = 0; i < NBUCKETS; i++)
   {
     if (i != key)
