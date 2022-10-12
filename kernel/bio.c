@@ -57,6 +57,8 @@ void binit(void)
   for (b = bcache.buf; b < bcache.buf + NBUF; b++)
   {
     int key = hashkey(b->blockno);
+    b->refcnt = 0;
+    b->time_stamp = ticks;
     b->next = bcache.hashbucket[key].next;
     b->prev = &bcache.hashbucket[key];
     initsleeplock(&b->lock, "buffer");
@@ -76,32 +78,40 @@ bget(uint dev, uint blockno)
   int key = hashkey(blockno);
   acquire(&bcache.bucketlock[key]);
 
+  uint min_ticks = -1;
+  struct buf *min_bcache = 0;
+
   // Is the block already cached?
   for (b = bcache.hashbucket[key].next; b != &bcache.hashbucket[key]; b = b->next)
   {
     if (b->dev == dev && b->blockno == blockno)
     {
       b->refcnt++;
+      b->time_stamp = ticks;
       release(&bcache.bucketlock[key]);
       acquiresleep(&b->lock);
       return b;
     }
+    if (b->refcnt == 0 && b->time_stamp < min_ticks)
+    {
+      min_ticks = b->time_stamp;
+      min_bcache = b;
+    }
   }
+  b = min_bcache;
 
   // Not cached.
   // Recycle the least recently used (LRU) unused buffer.
-  for (b = bcache.hashbucket[key].prev; b != &bcache.hashbucket[key]; b = b->prev)
+  if (b != 0)
   {
-    if (b->refcnt == 0)
-    {
-      b->dev = dev;
-      b->blockno = blockno;
-      b->valid = 0;
-      b->refcnt = 1;
-      release(&bcache.bucketlock[key]);
-      acquiresleep(&b->lock);
-      return b;
-    }
+    b->dev = dev;
+    b->blockno = blockno;
+    b->valid = 0;
+    b->refcnt = 1;
+    b->time_stamp = ticks;
+    release(&bcache.bucketlock[key]);
+    acquiresleep(&b->lock);
+    return b;
   }
   release(&bcache.bucketlock[key]);
 
@@ -120,6 +130,7 @@ bget(uint dev, uint blockno)
           b->blockno = blockno;
           b->valid = 0;
           b->refcnt = 1;
+          b->time_stamp = ticks;
 
           b->prev->next = b->next;
           b->next->prev = b->prev;
@@ -176,20 +187,12 @@ void brelse(struct buf *b)
 
   releasesleep(&b->lock);
 
-  int key = hashkey(b->blockno);
-  acquire(&bcache.bucketlock[key]);
-  b->refcnt--;
-  if (b->refcnt == 0)
+  b->time_stamp = ticks;
+  if (b->time_stamp == ticks)
   {
-    // no one is waiting for it.
-    b->next->prev = b->prev;
-    b->prev->next = b->next;
-    b->next = bcache.hashbucket[key].next;
-    b->prev = &bcache.hashbucket[key];
-    bcache.hashbucket[key].next->prev = b;
-    bcache.hashbucket[key].next = b;
+    b->refcnt--;
+    b->time_stamp = ticks;
   }
-  release(&bcache.bucketlock[key]);
 }
 
 void bpin(struct buf *b)
