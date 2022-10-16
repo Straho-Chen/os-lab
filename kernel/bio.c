@@ -26,7 +26,7 @@
 
 struct
 {
-  struct spinlock lock;
+  // struct spinlock lock;
   struct spinlock bucketlock[NBUCKETS];
   struct buf buf[NBUF];
 
@@ -45,7 +45,7 @@ void binit(void)
 {
   struct buf *b;
 
-  initlock(&bcache.lock, "bcache");
+  // initlock(&bcache.lock, "bcache");
   for (int i = 0; i < NBUCKETS; i++)
   {
     // Create linked list of buffers
@@ -114,7 +114,7 @@ bget(uint dev, uint blockno)
     return b;
   }
 
-  acquire(&bcache.lock);
+  // acquire(&bcache.lock);
   for (int i = 0; i < NBUCKETS; i++)
   {
     if (i != key)
@@ -141,7 +141,7 @@ bget(uint dev, uint blockno)
           bcache.hashbucket[key].next->prev = b;
           bcache.hashbucket[key].next = b;
 
-          release(&bcache.lock);
+          // release(&bcache.lock);
           release(&bcache.bucketlock[key]);
           acquiresleep(&b->lock);
           return b;
@@ -150,7 +150,7 @@ bget(uint dev, uint blockno)
       release(&bcache.bucketlock[i]);
     }
   }
-  release(&bcache.lock);
+  // release(&bcache.lock);
 
   panic("bget: no buffers");
 }
