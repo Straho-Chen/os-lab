@@ -26,7 +26,6 @@
 
 struct
 {
-  // struct spinlock lock;
   struct spinlock bucketlock[NBUCKETS];
   struct buf buf[NBUF];
 
@@ -112,18 +111,18 @@ bget(uint dev, uint blockno)
     acquiresleep(&b->lock);
     return b;
   }
+  release(&bcache.bucketlock[key]);
 
   for (int i = 0; i < NBUCKETS; i++)
   {
     if (i != key)
     {
-      if (bcache.bucketlock[i].locked)
-        continue;
       acquire(&bcache.bucketlock[i]);
       for (b = bcache.hashbucket[i].prev; b != &bcache.hashbucket[i]; b = b->prev)
       {
         if (b->refcnt == 0)
         {
+          acquire(&bcache.bucketlock[key]);
           b->dev = dev;
           b->blockno = blockno;
           b->valid = 0;
