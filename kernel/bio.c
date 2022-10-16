@@ -113,14 +113,14 @@ bget(uint dev, uint blockno)
     acquiresleep(&b->lock);
     return b;
   }
-  release(&bcache.bucketlock[key]);
 
   acquire(&bcache.lock);
-  acquire(&bcache.bucketlock[key]);
   for (int i = 0; i < NBUCKETS; i++)
   {
     if (i != key)
     {
+      if (bcache.bucketlock[i].locked)
+        continue;
       acquire(&bcache.bucketlock[i]);
       for (b = bcache.hashbucket[i].prev; b != &bcache.hashbucket[i]; b = b->prev)
       {
