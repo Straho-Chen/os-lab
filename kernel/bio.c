@@ -118,46 +118,53 @@ bget(uint dev, uint blockno)
     if (i != key)
     {
       acquire(&bcache.bucketlock[i]);
-      for (b = bcache.hashbucket[i].prev; b != &bcache.hashbucket[i]; b = b->prev)
+      acquire(&bcache.bucketlock[key]);
+      for (b = bcache.hashbucket[key].next; b != &bcache.hashbucket[key]; b = b->next)
       {
-        if (b->refcnt == 0)
+        if (b->dev == dev && b->blockno == blockno)
         {
-          acquire(&bcache.bucketlock[key]);
-          struct buf *tmp;
-          for (tmp = bcache.hashbucket[key].next; tmp != &bcache.hashbucket[key]; tmp = tmp->next)
-          {
-            if (tmp->dev == dev && tmp->blockno == blockno)
-            {
-              tmp->refcnt++;
-              tmp->time_stamp = ticks;
-              release(&bcache.bucketlock[key]);
-              release(&bcache.bucketlock[i]);
-              acquiresleep(&tmp->lock);
-              return tmp;
-            }
-          }
-
-          b->dev = dev;
-          b->blockno = blockno;
-          b->valid = 0;
-          b->refcnt = 1;
+          b->refcnt++;
           b->time_stamp = ticks;
-
-          b->prev->next = b->next;
-          b->next->prev = b->prev;
-          release(&bcache.bucketlock[i]);
-
-          b->next = bcache.hashbucket[key].next;
-          b->prev = &bcache.hashbucket[key];
-          bcache.hashbucket[key].next->prev = b;
-          bcache.hashbucket[key].next = b;
-
           release(&bcache.bucketlock[key]);
+          release(&bcache.bucketlock[i]);
           acquiresleep(&b->lock);
           return b;
         }
       }
+      min_bcache = 0;
+      min_ticks = -1;
+      for (b = bcache.hashbucket[i].prev; b != &bcache.hashbucket[i]; b = b->prev)
+      {
+        if (b->refcnt == 0 && b->time_stamp < min_ticks)
+        {
+          min_ticks = b->time_stamp;
+          min_bcache = b;
+        }
+      }
+      b = min_bcache;
+      if (b != 0)
+      {
+        b->dev = dev;
+        b->blockno = blockno;
+        b->valid = 0;
+        b->refcnt = 1;
+        b->time_stamp = ticks;
+
+        b->prev->next = b->next;
+        b->next->prev = b->prev;
+        release(&bcache.bucketlock[i]);
+
+        b->next = bcache.hashbucket[key].next;
+        b->prev = &bcache.hashbucket[key];
+        bcache.hashbucket[key].next->prev = b;
+        bcache.hashbucket[key].next = b;
+
+        release(&bcache.bucketlock[key]);
+        acquiresleep(&b->lock);
+        return b;
+      }
       release(&bcache.bucketlock[i]);
+      release(&bcache.bucketlock[key]);
     }
   }
 
