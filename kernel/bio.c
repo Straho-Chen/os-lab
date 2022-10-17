@@ -123,6 +123,20 @@ bget(uint dev, uint blockno)
         if (b->refcnt == 0)
         {
           acquire(&bcache.bucketlock[key]);
+          struct buf *tmp;
+          for (tmp = bcache.hashbucket[key].next; tmp != &bcache.hashbucket[key]; tmp = tmp->next)
+          {
+            if (tmp->dev == dev && tmp->blockno == blockno)
+            {
+              tmp->refcnt++;
+              tmp->time_stamp = ticks;
+              release(&bcache.bucketlock[key]);
+              release(&bcache.bucketlock[i]);
+              acquiresleep(&tmp->lock);
+              return tmp;
+            }
+          }
+
           b->dev = dev;
           b->blockno = blockno;
           b->valid = 0;
