@@ -118,19 +118,6 @@ bget(uint dev, uint blockno)
     if (i != key)
     {
       acquire(&bcache.bucketlock[i]);
-      acquire(&bcache.bucketlock[key]);
-      for (b = bcache.hashbucket[key].next; b != &bcache.hashbucket[key]; b = b->next)
-      {
-        if (b->dev == dev && b->blockno == blockno)
-        {
-          b->refcnt++;
-          b->time_stamp = ticks;
-          release(&bcache.bucketlock[key]);
-          release(&bcache.bucketlock[i]);
-          acquiresleep(&b->lock);
-          return b;
-        }
-      }
       min_bcache = 0;
       min_ticks = -1;
       for (b = bcache.hashbucket[i].prev; b != &bcache.hashbucket[i]; b = b->prev)
@@ -144,6 +131,20 @@ bget(uint dev, uint blockno)
       b = min_bcache;
       if (b != 0)
       {
+        acquire(&bcache.bucketlock[key]);
+        struct buf *tmp;
+        for (tmp = bcache.hashbucket[key].next; tmp != &bcache.hashbucket[key]; tmp = tmp->next)
+        {
+          if (tmp->dev == dev && tmp->blockno == blockno)
+          {
+            tmp->refcnt++;
+            tmp->time_stamp = ticks;
+            release(&bcache.bucketlock[key]);
+            release(&bcache.bucketlock[i]);
+            acquiresleep(&tmp->lock);
+            return tmp;
+          }
+        }
         b->dev = dev;
         b->blockno = blockno;
         b->valid = 0;
@@ -164,7 +165,6 @@ bget(uint dev, uint blockno)
         return b;
       }
       release(&bcache.bucketlock[i]);
-      release(&bcache.bucketlock[key]);
     }
   }
 
