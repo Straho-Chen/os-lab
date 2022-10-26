@@ -30,6 +30,15 @@ void procinit(void)
   for (p = proc; p < &proc[NPROC]; p++)
   {
     initlock(&p->lock, "proc");
+
+    // kernel stack set up.
+    char *pa = kalloc(); // alloc a physical memory.
+    if (pa == 0)
+      panic("kalloc");
+    uint64 va = KSTACK((int)(p - proc));
+    kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W); // mapping the kernel page table to physical addresses.
+    p->kstack = va;
+    p->kstack_pa = (uint64)pa; // Make sure that each process's kernel page table has a mapping for that process's kernel stack.
   }
   kvminithart();
 }
@@ -127,13 +136,7 @@ found:
     return 0;
   }
 
-  // kernel stack set up.
-  char *pa = kalloc(); // alloc a physical memory.
-  if (pa == 0)
-    panic("kalloc");
-  uint64 va = KSTACK((int)(p - proc));
-  kvmmap(p->kpagetable, va, (uint64)pa, PGSIZE, PTE_R | PTE_W); // mapping the kernel page table to physical addresses.
-  p->kstack = va;                                               // Make sure that each process's kernel page table has a mapping for that process's kernel stack.
+  kvmmap_new(p->kpagetable, p->kstack, p->kstack_pa, PGSIZE, PTE_R | PTE_W);
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
@@ -153,15 +156,6 @@ freeproc(struct proc *p)
   if (p->trapframe)
     kfree((void *)p->trapframe);
   p->trapframe = 0;
-
-  if (p->kstack)
-  {
-    pte_t *pte = walk(p->kpagetable, p->kstack, 0);
-    if (pte == 0)
-      panic("freeproc: kstack");
-    kfree((void *)(PTE2PA(*pte) + p->kstack % PGSIZE));
-  }
-  p->kstack = 0;
 
   if (p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
@@ -547,6 +541,8 @@ void scheduler(void)
         sfence_vma();
 
         swtch(&c->context, &p->context);
+
+        kvminithart();
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
