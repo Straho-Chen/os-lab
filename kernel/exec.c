@@ -52,6 +52,8 @@ int exec(char *path, char **argv)
     uint64 sz1;
     if ((sz1 = uvmalloc(pagetable, sz, ph.vaddr + ph.memsz)) == 0)
       goto bad;
+    if (sz1 >= PLIC)
+      goto bad;
     sz = sz1;
     if (ph.vaddr % PGSIZE != 0)
       goto bad;
@@ -113,6 +115,8 @@ int exec(char *path, char **argv)
   // Commit to the user image.
   oldpagetable = p->pagetable;
   p->pagetable = pagetable;
+  kvmcopy(p->pagetable, p->kpagetable, oldsz, 0);
+  kvmcopy(p->pagetable, p->kpagetable, 0, sz);
   p->sz = sz;
   p->trapframe->epc = elf.entry; // initial program counter = main
   p->trapframe->sp = sp;         // initial stack pointer
