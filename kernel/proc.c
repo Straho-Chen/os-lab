@@ -222,7 +222,7 @@ proc_kpagetable(struct proc *p)
   pagetable_t kpagetable;
 
   // init a kernel page table.
-  kpagetable = kvminit();
+  kpagetable = kvminit_new();
   if (kpagetable == 0)
     return 0;
   return kpagetable;

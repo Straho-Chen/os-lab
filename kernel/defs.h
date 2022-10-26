@@ -160,7 +160,8 @@ void uartputc_sync(int);
 int uartgetc(void);
 
 // vm.c
-pagetable_t kvminit(void);
+void kvminit(void);
+pagetable_t kvminit_new(void);
 void kvminithart(void);
 pte_t *walk(pagetable_t, uint64, int);
 uint64 kvmpa(pagetable_t, uint64);

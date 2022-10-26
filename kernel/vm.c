@@ -18,9 +18,16 @@ extern char trampoline[]; // trampoline.S
 /*
  * create a direct-map page table for the kernel.
  */
-pagetable_t kvminit()
+void kvminit()
 {
-  kernel_pagetable = (pagetable_t)kalloc();
+  kernel_pagetable = kvminit_new();
+  // CLINT
+  kvmmap(kernel_pagetable, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+}
+
+pagetable_t kvminit_new()
+{
+  pagetable_t kernel_pagetable = (pagetable_t)kalloc();
   memset(kernel_pagetable, 0, PGSIZE);
 
   // uart registers
@@ -28,9 +35,6 @@ pagetable_t kvminit()
 
   // virtio mmio disk interface
   kvmmap(kernel_pagetable, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
-
-  // CLINT
-  kvmmap(kernel_pagetable, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
 
   // PLIC
   kvmmap(kernel_pagetable, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
