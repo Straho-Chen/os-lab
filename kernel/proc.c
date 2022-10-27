@@ -162,7 +162,7 @@ freeproc(struct proc *p)
   p->pagetable = 0;
 
   if (p->kpagetable)
-    proc_freekpagetable(p->kpagetable);
+    proc_freekpagetable(p->kpagetable, 1);
   p->kpagetable = 0;
 
   p->sz = 0;
@@ -232,15 +232,23 @@ void proc_freepagetable(pagetable_t pagetable, uint64 sz)
 }
 
 // Free a process's page table, not free its leaf physical memory pages.
-void proc_freekpagetable(pagetable_t kpagetable)
+void proc_freekpagetable(pagetable_t kpagetable, int flag)
 {
+  if (flag)
+  {
+    pte_t *pte = (pte_t *)PTE2PA(kpagetable[0]);
+    for (int i = 0; i < 95; i++)
+    {
+      pte[i] = 0;
+    }
+  }
   for (int i = 0; i < 512; i++)
   {
     pte_t pte = kpagetable[i];
     if ((pte & PTE_V) && ((pte & (PTE_R | PTE_W | PTE_X)) == 0))
     {
       uint64 child = PTE2PA(pte);
-      proc_freekpagetable((pagetable_t)child);
+      proc_freekpagetable((pagetable_t)child, 0);
       kpagetable[i] = 0;
     }
   }
@@ -270,7 +278,7 @@ void userinit(void)
   // and data into it.
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
-  kvmcopy(p->pagetable, p->kpagetable, 0, p->sz);
+  kvmcopy(p->pagetable, p->kpagetable);
 
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;     // user program counter
@@ -305,7 +313,7 @@ int growproc(int n)
   {
     sz = uvmdealloc(p->pagetable, sz, sz + n);
   }
-  kvmcopy(p->pagetable, p->kpagetable, p->sz, p->sz + n);
+  kvmcopy(p->pagetable, p->kpagetable);
   p->sz = sz;
   return 0;
 }
@@ -331,7 +339,7 @@ int fork(void)
     release(&np->lock);
     return -1;
   }
-  kvmcopy(np->pagetable, np->kpagetable, 0, p->sz);
+  kvmcopy(np->pagetable, np->kpagetable);
   np->sz = p->sz;
 
   np->parent = p;

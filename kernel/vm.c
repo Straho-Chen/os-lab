@@ -380,36 +380,15 @@ err:
   return -1;
 }
 
-void kvmcopy(pagetable_t old, pagetable_t new, uint64 oldsz, uint64 newsz)
+void kvmcopy(pagetable_t old, pagetable_t new)
 {
   pte_t *src, *dst;
-  uint64 pa, i;
-  uint flags;
-
-  if (newsz < oldsz)
+  src = (pte_t *)PTE2PA(old[0]);
+  dst = (pte_t *)PTE2PA(new[0]);
+  for (int i = 0; i < 95; i++)
   {
-    for (i = newsz; i < oldsz; i += PGSIZE)
-    {
-      dst = walk(new, i, 1);
-      *dst &= ~PTE_V;
-    }
-    return;
+    dst[i] = src[i];
   }
-
-  oldsz = PGROUNDUP(oldsz);
-  for (i = oldsz; i < newsz; i += PGSIZE)
-  {
-    if ((src = walk(old, i, 0)) == 0)
-      panic("kvmcopy: pte should exist");
-    if ((*src & PTE_V) == 0)
-      panic("kvmcopy: page not present");
-    if ((dst = walk(new, i, 1)) == 0)
-      panic("kvmcopy: kernel page alloc failed");
-    pa = PTE2PA(*src);
-    flags = PTE_FLAGS(*src) & (~PTE_U);
-    *dst = PA2PTE(pa) | flags;
-  }
-  return;
 }
 
 // mark a PTE invalid for user access.
@@ -454,7 +433,11 @@ int copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 // Return 0 on success, -1 on error.
 int copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
-  return copyin_new(pagetable, dst, srcva, len);
+  int ret;
+  w_sstatus(r_sstatus() | SSTATUS_SUM);
+  ret = copyin_new(pagetable, dst, srcva, len);
+  w_sstatus(r_sstatus() & ~SSTATUS_SUM);
+  return ret;
 }
 
 // Copy a null-terminated string from user to kernel.
@@ -463,7 +446,11 @@ int copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 // Return 0 on success, -1 on error.
 int copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 {
-  return copyinstr_new(pagetable, dst, srcva, max);
+  int ret;
+  w_sstatus(r_sstatus() | SSTATUS_SUM);
+  ret = copyinstr_new(pagetable, dst, srcva, max);
+  w_sstatus(r_sstatus() & ~SSTATUS_SUM);
+  return ret;
 }
 
 // check if use global kpgtbl or not
