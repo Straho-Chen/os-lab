@@ -68,44 +68,19 @@ void usertrap(void)
   {
     // ok
   }
-  else
+  else if ((r_scause() == 13) || (r_scause() == 15))
   {
-    int fault = 0;
-    if (r_scause() == 13 || r_scause() == 15)
-    {
-      char *mem;
-      uint64 a;
-
-      uint64 oldsz = PGROUNDDOWN(r_stval());
-      for (a = oldsz; a < p->sz; a += PGSIZE)
-      {
-        mem = kalloc();
-        if (mem == 0)
-        {
-          uvmdealloc(p->pagetable, a, oldsz);
-          fault = -1;
-          break;
-        }
-        memset(mem, 0, PGSIZE);
-        if (mappages(p->pagetable, a, PGSIZE, (uint64)mem, PTE_W | PTE_X | PTE_R | PTE_U) != 0)
-        {
-          kfree(mem);
-          uvmdealloc(p->pagetable, a, oldsz);
-          fault = -2;
-          break;
-        }
-      }
-    }
-    else
-    {
-      fault = -1;
-    }
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
-    printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
-    if (fault < 0)
+    uint64 va = r_stval();
+    if (lazymalloc(va) < 0)
     {
       p->killed = 1;
     }
+  }
+  else
+  {
+    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+    printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+    p->killed = 1;
   }
 
   if (p->killed)
