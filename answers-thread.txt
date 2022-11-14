@@ -1,0 +1,1 @@
+If there are 2 threads with the same key, they will change the value of the same table[i], and the first value will be replace by the second.
