@@ -14,28 +14,67 @@ void freerange(void *pa_start, void *pa_end);
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
 
-struct run {
+struct run
+{
   struct run *next;
 };
 
-struct {
+struct
+{
   struct spinlock lock;
   struct run *freelist;
 } kmem;
 
-void
-kinit()
+struct
 {
-  initlock(&kmem.lock, "kmem");
-  freerange(end, (void*)PHYSTOP);
+  struct spinlock lock;
+  int cnt[(PHYSTOP - KERNBASE) / PGSIZE];
+} ref_cnt;
+
+uint64 getindex(uint64 pa)
+{
+  return (pa - KERNBASE) / PGSIZE;
 }
 
-void
-freerange(void *pa_start, void *pa_end)
+void ref_acquire()
+{
+  acquire(&ref_cnt.lock);
+}
+
+void ref_release()
+{
+  release(&ref_cnt.lock);
+}
+
+void ref_set(int n, uint64 pa)
+{
+  ref_cnt.cnt[getindex(pa)] = n;
+}
+
+int ref_get(uint64 pa)
+{
+  return ref_cnt.cnt[getindex(pa)];
+}
+
+void ref_inc(uint64 pa)
+{
+  ref_acquire();
+  ref_cnt.cnt[getindex(pa)]++;
+  ref_release();
+}
+
+void kinit()
+{
+  initlock(&kmem.lock, "kmem");
+  initlock(&ref_cnt.lock, "ref_cnt");
+  freerange(end, (void *)PHYSTOP);
+}
+
+void freerange(void *pa_start, void *pa_end)
 {
   char *p;
-  p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
+  p = (char *)PGROUNDUP((uint64)pa_start);
+  for (; p + PGSIZE <= (char *)pa_end; p += PGSIZE)
     kfree(p);
 }
 
@@ -43,18 +82,27 @@ freerange(void *pa_start, void *pa_end)
 // which normally should have been returned by a
 // call to kalloc().  (The exception is when
 // initializing the allocator; see kinit above.)
-void
-kfree(void *pa)
+void kfree(void *pa)
 {
   struct run *r;
 
-  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+  ref_acquire();
+  if (ref_cnt.cnt[getindex((uint64)pa)] > 1)
+  {
+    ref_cnt.cnt[getindex((uint64)pa)]--;
+    ref_release();
+    return;
+  }
+
+  if (((uint64)pa % PGSIZE) != 0 || (char *)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
+  ref_cnt.cnt[getindex((uint64)pa)] = 0;
+  ref_release();
 
-  r = (struct run*)pa;
+  r = (struct run *)pa;
 
   acquire(&kmem.lock);
   r->next = kmem.freelist;
@@ -72,11 +120,14 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if (r)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
-  if(r)
-    memset((char*)r, 5, PGSIZE); // fill with junk
-  return (void*)r;
+  if (r)
+    memset((char *)r, 5, PGSIZE); // fill with junk
+
+  if (r)
+    ref_set(1, (uint64)r);
+  return (void *)r;
 }
