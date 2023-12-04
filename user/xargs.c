@@ -46,6 +46,5 @@ int main(int argc, char *argv[])
 
     free(buff);
     free(in);
-
     exit(0);
 }
